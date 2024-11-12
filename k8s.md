@@ -1,5 +1,36 @@
 # Kubernetes Implementation Guide
 
+```mermaid
+flowchart TB
+    subgraph "Kubernetes Cluster"
+        subgraph "ski-crawler Namespace"
+            subgraph "Compute Layer"
+                ING["Ingress\nHTTPS"]
+                POD["Crawler Pods\n2x 500m/1Gi"]
+                CJ["CronJob\nDaily Crawl"]
+            end
+
+            subgraph "Data Layer"
+                PG["PostgreSQL StatefulSet\n1x 1Gi/10Gi"]
+                PVC["PersistentVolume\n10Gi"]
+            end
+        end
+    end
+
+    subgraph "External Services"
+        S3["AWS S3\nScreenshots"]
+        DNS["External DNS"]
+        Users["Users"]
+    end
+
+    Users --> DNS
+    DNS --> ING
+    ING --> POD
+    CJ --> POD
+    POD --> PG
+    POD --> S3
+    PG --> PVC
+```
 ## Overview
 This guide details the Kubernetes deployment setup for the Ski Card Crawler application.
 
@@ -280,37 +311,6 @@ spec:
       target:
         type: Utilization
         averageUtilization: 80
-
-## CI/CD Configuration
-
-```yaml
-# .github/workflows/k8s-deploy.yml
-name: Deploy to Kubernetes
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        push: true
-        tags: <your-registry>/ski-crawler:${{ github.sha }}
-
-    - name: Deploy to Kubernetes
-      uses: steebchen/kubectl@v2
-      with:
-        config: ${{ secrets.KUBE_CONFIG_DATA }}
-        command: |
-          kubectl set image deployment/ski-crawler \
-          ski-crawler=<your-registry>/ski-crawler:${{ github.sha }} \
-          -n ski-crawler
 ```
 
 ## Monitoring Setup
