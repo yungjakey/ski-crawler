@@ -3,11 +3,6 @@
 ```mermaid
 flowchart TB
 
-    subgraph "External Traffic"
-        DNS["External DNS"]
-        Users["Users"]
-    end
-
     subgraph "Kubernetes Cluster"
         subgraph "ski-crawler Namespace"
             subgraph "Compute Layer"
@@ -24,8 +19,7 @@ flowchart TB
     end
 
 
-    Users --> DNS
-    DNS --> ING
+    Users --> ING
     ING --> POD
     CJ --> POD
     POD --> PG
