@@ -5,20 +5,20 @@ flowchart TB
     subgraph "Kubernetes Cluster"
         subgraph "ski-crawler Namespace"
             subgraph "Compute Layer"
-                ING["Ingress\nHTTPS"]
-                POD["Crawler Pods\n2x 500m/1Gi"]
-                CJ["CronJob\nDaily Crawl"]
+                ING["Ingress- HTTPS"]
+                POD["Crawler Pods- 2x 500m/1Gi"]
+                CJ["CronJob- Daily Crawl"]
             end
 
             subgraph "Data Layer"
-                PG["PostgreSQL StatefulSet\n1x 1Gi/10Gi"]
-                PVC["PersistentVolume\n10Gi"]
+                PG["PostgreSQL StatefulSet- 1x 1Gi/10Gi"]
+                PVC["PersistentVolume- 10Gi"]
             end
         end
     end
 
     subgraph "External Services"
-        S3["AWS S3\nScreenshots"]
+        S3["AWS S3- Screenshots"]
         DNS["External DNS"]
         Users["Users"]
     end
