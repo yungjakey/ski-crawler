@@ -1,14 +1,6 @@
-# Ski Card Crawler - Implementation Options
+# Ski Card Crawler Implementation Guide
 
-This document outlines two implementation approaches for a temporary ski card crawler solution.
-
-## Architecture Overview
-
-### AWS Solution
-![AWS Architecture](./assets/aws.merm.svg)
-
-### Kubernetes Solution
-![Kubernetes Architecture](./assets/k8s.merm.svg)
+This repository contains implementation guides for deploying the Ski Card Crawler application on either AWS or Kubernetes infrastructure.
 
 ## Quick Facts
 
@@ -16,76 +8,97 @@ This document outlines two implementation approaches for a temporary ski card cr
 |------------|--------------------------|------------------------|
 | Setup Time | 4 days                   | 4 days                 |
 | Complexity | Standalone infrastructure| Uses existing platform |
-| Cost/Month | ~$50-70                  | Uses existing cluster + S3 |
-| Cleanup    | Multiple resources       | Single namespace       |
+| Cost/Month | ~$65-70                  | Uses existing cluster + S3 |
+| Cleanup    | Multiple AWS resources   | Single namespace      |
 
-## Common Components
-- PostgreSQL database
-- Node.js application
-- S3 storage for screenshots
-- HTTPS frontend access
+## Architecture Overview
 
-## AWS Approach
-**Pros:**
-- Simple, standalone setup
-- Managed RDS database
-- Direct AWS service integration
-- Independent from other infrastructure
-
-**Cons:**
-- More AWS resources to manage
-- Higher direct costs
-- More cleanup steps
-- Manual scaling
-
-**Key Components:**
+### AWS Solution
+The AWS implementation uses:
 - EC2 t3.medium (Ubuntu 22.04)
 - RDS PostgreSQL 11.22 (db.t3.micro)
 - Application Load Balancer
 - S3 Bucket
+- CloudWatch monitoring
 
-## Kubernetes Approach
-**Pros:**
-- Uses existing infrastructure
-- Simple cleanup
-- Built-in monitoring
-- Easier scaling
-
-**Cons:**
-- Requires K8s knowledge
-- Depends on cluster stability
-- Manual database management
-- More complex initial setup
-
-**Key Components:**
-- 2x Crawler Pods (500m CPU, 1Gi RAM)
+### Kubernetes Solution
+The Kubernetes implementation uses:
+- 2x Application Pods (500m CPU, 1Gi RAM)
 - PostgreSQL StatefulSet (1Gi RAM, 10Gi Storage)
-- Existing Ingress
+- Nginx Ingress
 - S3 Bucket
+- Prometheus/Grafana monitoring
+
+## Technical Requirements
+- Node.js v20
+- PostgreSQL 11.22
+- S3-compatible storage for screenshots
+- HTTPS-enabled domain access
+- GitHub repository access
 
 ## Implementation Timeline
-1. **Day 1:** Infrastructure setup
-2. **Day 2:** Application deployment
-3. **Day 3:** Testing & Network configuration
-4. **Day 4:** Validation & Handover
 
-## Recommendation
-- **With existing K8s cluster:** Use Kubernetes approach
-- **Without K8s expertise:** Use AWS approach
+### Day 1: Infrastructure Setup
+- Network configuration
+- Database provisioning
+- Storage setup
 
-## Storage Strategy
-Both solutions use AWS S3 for screenshot storage:
-- Organized by resort and timestamp
+### Day 2: Application Deployment
+- Application server/container setup
+- Environment configuration
+- Initial deployment
+
+### Day 3: Network & Security
+- SSL/TLS configuration
+- Domain setup
+- Security hardening
+
+### Day 4: Monitoring & Handover
+- Monitoring setup
+- Documentation
+- Knowledge transfer
+
+## Implementation Guides
+Detailed implementation steps can be found in:
+- [AWS Implementation Guide](aws.md)
+- [Kubernetes Implementation Guide](k8s.md)
+
+## Common Components
+
+### Database
+- PostgreSQL 11.22
+- Basic CRUD operations
+- No complex queries or functions
+- Regular backup requirements
+
+### Storage
+- S3 bucket for screenshots
+- Organized by resort/timestamp
 - Accessed via pre-signed URLs
-- Retained after solution cleanup
-- No automatic deletion
+- No automatic deletion required
 
-## Documentation
-Detailed implementation guides:
-- [Kubernetes Implementation](./k8s-readme.md)
-- [AWS Implementation](./aws-readme.md)
+### Application
+- Node.js v20 runtime
+- Frontend + API server
+- Basic authentication
+- Screenshot capture capability
 
-## Contact
-- Project Owner: [Name]
-- AWS Team: [Team]
-- K8s Team: [Team]
+### Monitoring
+- Health checks
+- Resource utilization
+- Error tracking
+- Performance metrics
+
+## Choice Guide
+
+### Choose AWS if:
+- No existing Kubernetes expertise
+- Need standalone infrastructure
+- Prefer managed services
+- Want simpler initial setup
+
+### Choose Kubernetes if:
+- Have existing K8s cluster
+- Need easier scaling
+- Want standardized deployment
+- Have DevOps expertise

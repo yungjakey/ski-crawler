@@ -1,357 +1,310 @@
-# Kubernetes Implementation Guide
+# AWS Implementation Guide
 
-## Prerequisites
-- Access to existing Kubernetes cluster
-- kubectl configured
-- Helm installed
-- GitHub repository access
-- AWS S3 access for screenshot storage
+## Overview
+This guide details the AWS infrastructure setup for the Ski Card Crawler application.
+
+### Requirements
+- AWS Account with administrative access
+- AWS CLI installed and configured
+- Access to application GitHub repository
+- Domain name for frontend access
+- Node.js v20 application codebase
+
+### Architecture Components
+- EC2 t3.medium (Ubuntu 22.04)
+- RDS PostgreSQL 11.22 (db.t3.micro)
+- Application Load Balancer
+- S3 Bucket for screenshots
+- CloudWatch monitoring
 
 ## Implementation Steps
 
-### 1. Namespace Setup
+### 1. Network Setup
+
 ```bash
-# Create namespace
-kubectl create namespace ski-crawler
+# Create VPC
+aws ec2 create-vpc \
+    --cidr-block 10.0.0.0/16 \
+    --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=ski-crawler-vpc}]'
 
-# Set context
-kubectl config set-context --current --namespace=ski-crawler
+# Create subnets
+aws ec2 create-subnet \
+    --vpc-id <vpc-id> \
+    --cidr-block 10.0.1.0/24 \
+    --availability-zone eu-central-1a \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=ski-crawler-public-1}]'
+
+aws ec2 create-subnet \
+    --vpc-id <vpc-id> \
+    --cidr-block 10.0.2.0/24 \
+    --availability-zone eu-central-1b \
+    --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=ski-crawler-private-1}]'
+
+# Create Internet Gateway
+aws ec2 create-internet-gateway \
+    --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=ski-crawler-igw}]'
+aws ec2 attach-internet-gateway --vpc-id <vpc-id> --internet-gateway-id <igw-id>
 ```
 
-### 2. Database Setup
+### 2. Database Configuration
 
-Create PostgreSQL StatefulSet configuration:
-
-```yaml
-# postgres-statefulset.yaml
-apiVersion: apps/v1
-kind: StatefulSet
-metadata:
-  name: postgres
-spec:
-  serviceName: postgres
-  replicas: 1
-  selector:
-    matchLabels:
-      app: postgres
-  template:
-    metadata:
-      labels:
-        app: postgres
-    spec:
-      containers:
-      - name: postgres
-        image: postgres:11.22
-        env:
-        - name: POSTGRES_DB
-          value: ski_crawler
-        - name: POSTGRES_USER
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secret
-              key: username
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secret
-              key: password
-        ports:
-        - containerPort: 5432
-        volumeMounts:
-        - name: postgres-storage
-          mountPath: /var/lib/postgresql/data
-  volumeClaimTemplates:
-  - metadata:
-      name: postgres-storage
-    spec:
-      accessModes: [ "ReadWriteOnce" ]
-      resources:
-        requests:
-          storage: 10Gi
-```
-
-Apply the configuration:
 ```bash
-kubectl apply -f postgres-statefulset.yaml
+# Create DB subnet group
+aws rds create-db-subnet-group \
+    --db-subnet-group-name ski-crawler-db-subnet \
+    --db-subnet-group-description "Subnet group for Ski Crawler DB" \
+    --subnet-ids <private-subnet-1-id> <private-subnet-2-id>
+
+# Create RDS instance
+aws rds create-db-instance \
+    --db-instance-identifier ski-crawler-db \
+    --db-instance-class db.t3.micro \
+    --engine postgres \
+    --engine-version 11.22 \
+    --master-username admin \
+    --master-user-password <secure-password> \
+    --allocated-storage 20 \
+    --db-subnet-group-name ski-crawler-db-subnet \
+    --backup-retention-period 7 \
+    --multi-az false
 ```
 
-### 3. Application Deployment
+### 3. Application Server Setup
 
-Create deployment configuration:
+```bash
+# Create security group
+aws ec2 create-security-group \
+    --group-name ski-crawler-sg \
+    --description "Security group for Ski Crawler"
 
-```yaml
-# deployment.yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ski-crawler
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: ski-crawler
-  template:
-    metadata:
-      labels:
-        app: ski-crawler
-    spec:
-      containers:
-      - name: ski-crawler
-        image: <your-registry>/ski-crawler:latest
-        resources:
-          requests:
-            memory: "1Gi"
-            cpu: "500m"
-          limits:
-            memory: "2Gi"
-            cpu: "1000m"
-        env:
-        - name: DB_HOST
-          value: postgres
-        - name: DB_PORT
-          value: "5432"
-        - name: DB_NAME
-          value: ski_crawler
-        - name: DB_USER
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secret
-              key: username
-        - name: DB_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: postgres-secret
-              key: password
-        - name: AWS_ACCESS_KEY_ID
-          valueFrom:
-            secretKeyRef:
-              name: aws-secret
-              key: access-key
-        - name: AWS_SECRET_ACCESS_KEY
-          valueFrom:
-            secretKeyRef:
-              name: aws-secret
-              key: secret-key
-        - name: S3_BUCKET
-          value: ski-crawler-screenshots
+# Configure security group rules
+aws ec2 authorize-security-group-ingress \
+    --group-id <security-group-id> \
+    --protocol tcp \
+    --port 22 \
+    --cidr 0.0.0.0/0
+
+aws ec2 authorize-security-group-ingress \
+    --group-id <security-group-id> \
+    --protocol tcp \
+    --port 80 \
+    --cidr 0.0.0.0/0
+
+# Launch EC2 instance
+aws ec2 run-instances \
+    --image-id ami-0faab6bdbac9486fb \
+    --instance-type t3.medium \
+    --key-name <your-key-pair> \
+    --security-group-ids <security-group-id> \
+    --subnet-id <public-subnet-id> \
+    --tag-specifications 'ResourceType=instance,Tags=[{Key=Name,Value=ski-crawler}]'
 ```
 
-### 4. Service and Ingress Setup
+### 4. Storage Configuration
 
-```yaml
-# service.yaml
-apiVersion: v1
-kind: Service
-metadata:
-  name: ski-crawler
-spec:
-  selector:
-    app: ski-crawler
-  ports:
-  - port: 80
-    targetPort: 3000
-  type: ClusterIP
+```bash
+# Create S3 bucket
+aws s3 mb s3://ski-crawler-screenshots
 
----
-# ingress.yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: ski-crawler
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-spec:
-  rules:
-  - host: ski-crawler.your-domain.com
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: ski-crawler
-            port:
-              number: 80
-  tls:
-  - hosts:
-    - ski-crawler.your-domain.com
-    secretName: ski-crawler-tls
+# Configure CORS
+cat > cors-config.json << EOF
+{
+    "CORSRules": [
+        {
+            "AllowedOrigins": ["*"],
+            "AllowedHeaders": ["*"],
+            "AllowedMethods": ["GET", "PUT", "POST"],
+            "MaxAgeSeconds": 3000
+        }
+    ]
+}
+EOF
+
+aws s3api put-bucket-cors \
+    --bucket ski-crawler-screenshots \
+    --cors-configuration file://cors-config.json
+
+# Configure lifecycle rules
+aws s3api put-bucket-lifecycle-configuration \
+    --bucket ski-crawler-screenshots \
+    --lifecycle-configuration file://lifecycle-config.json
 ```
 
-### 5. Secrets Management
+### 5. Load Balancer Setup
 
-```yaml
-# secrets.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-secret
-type: Opaque
-data:
-  username: <base64-encoded-username>
-  password: <base64-encoded-password>
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: aws-secret
-type: Opaque
-data:
-  access-key: <base64-encoded-access-key>
-  secret-key: <base64-encoded-secret-key>
+```bash
+# Create ALB
+aws elbv2 create-load-balancer \
+    --name ski-crawler-alb \
+    --subnets <public-subnet-1-id> <public-subnet-2-id> \
+    --security-groups <security-group-id>
+
+# Create target group
+aws elbv2 create-target-group \
+    --name ski-crawler-tg \
+    --protocol HTTP \
+    --port 80 \
+    --vpc-id <vpc-id> \
+    --health-check-path /health
 ```
 
-### 6. CI/CD Pipeline
+### 6. Application Deployment
+
+```bash
+# SSH into EC2 instance
+ssh -i <key-pair.pem> ubuntu@<ec2-instance-ip>
+
+# Install Node.js 20
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Install PostgreSQL client
+sudo apt-get install postgresql-client
+
+# Configure application
+git clone <repository-url>
+cd <repository-name>
+
+# Setup environment
+cat > .env << EOF
+DB_HOST=<rds-endpoint>
+DB_PORT=5432
+DB_NAME=ski_crawler
+DB_USER=admin
+DB_PASSWORD=<password>
+S3_BUCKET=ski-crawler-screenshots
+AWS_REGION=eu-central-1
+EOF
+
+# Install PM2
+npm install -g pm2
+
+# Start application
+pm2 start npm --name "ski-crawler" -- start
+pm2 startup
+pm2 save
+```
+
+### 7. SSL/Domain Configuration
+
+```bash
+# Install Certbot
+sudo apt-get update
+sudo apt-get install -y certbot python3-certbot-nginx
+
+# Configure Nginx
+sudo apt-get install -y nginx
+
+# Configure SSL
+sudo certbot --nginx -d your-domain.com
+```
+
+## Monitoring Setup
+
+### CloudWatch Configuration
+
+```bash
+# Install CloudWatch agent
+sudo apt-get install -y amazon-cloudwatch-agent
+
+# Configure CloudWatch
+sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-config-wizard
+
+# Create CPU alarm
+aws cloudwatch put-metric-alarm \
+    --alarm-name cpu-utilization \
+    --comparison-operator GreaterThanThreshold \
+    --evaluation-periods 2 \
+    --metric-name CPUUtilization \
+    --namespace AWS/EC2 \
+    --period 300 \
+    --threshold 80 \
+    --statistic Average
+```
+
+## CI/CD Configuration
 
 ```yaml
-# .github/workflows/k8s-deploy.yml
-name: Deploy to Kubernetes
+# .github/workflows/aws-deploy.yml
+name: Deploy to AWS
 on:
   push:
     branches: [ main ]
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v2
-      with:
-        context: .
-        push: true
-        tags: <your-registry>/ski-crawler:${{ github.sha }}
-
-    - name: Deploy to Kubernetes
-      uses: steebchen/kubectl@v2
-      with:
-        config: ${{ secrets.KUBE_CONFIG_DATA }}
-        command: set image deployment/ski-crawler ski-crawler=<your-registry>/ski-crawler:${{ github.sha }} -n ski-crawler
+      - uses: actions/checkout@v2
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /path/to/app
+            git pull
+            npm install
+            pm2 restart all
 ```
 
-## Monitoring Setup
+## Cost Breakdown
 
-### 1. Prometheus Configuration
-
-```yaml
-# prometheus-servicemonitor.yaml
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: ski-crawler
-spec:
-  selector:
-    matchLabels:
-      app: ski-crawler
-  endpoints:
-  - port: metrics
-```
-
-### 2. Grafana Dashboard
-
-Import the following dashboard configuration:
-```json
-{
-  "dashboard": {
-    "title": "Ski Crawler Metrics",
-    "panels": [
-      {
-        "title": "CPU Usage",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "container_cpu_usage_seconds_total{namespace='ski-crawler'}"
-          }
-        ]
-      },
-      {
-        "title": "Memory Usage",
-        "type": "graph",
-        "targets": [
-          {
-            "expr": "container_memory_usage_bytes{namespace='ski-crawler'}"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-## Resource Management
-
-### 1. Resource Quotas
-```yaml
-# quota.yaml
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: ski-crawler-quota
-spec:
-  hard:
-    requests.cpu: "2"
-    requests.memory: 4Gi
-    limits.cpu: "4"
-    limits.memory: 8Gi
-```
-
-### 2. HPA Configuration
-```yaml
-# hpa.yaml
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: ski-crawler
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: ski-crawler
-  minReplicas: 2
-  maxReplicas: 5
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 80
-```
+| Resource | Monthly Cost |
+|----------|--------------|
+| EC2 t3.medium | $30 |
+| RDS db.t3.micro | $15 |
+| S3 storage | $5-10 |
+| Load Balancer | $15 |
+| **Total** | **$65-70** |
 
 ## Cleanup Procedure
 
 ```bash
-# Delete all resources in namespace
-kubectl delete namespace ski-crawler
+# 1. Delete EC2 instance
+aws ec2 terminate-instances --instance-ids <instance-id>
 
-# Remove ingress configuration
-kubectl delete ingress ski-crawler
+# 2. Delete RDS instance
+aws rds delete-db-instance --db-instance-identifier ski-crawler-db
 
-# Remove TLS secrets
-kubectl delete secret ski-crawler-tls
+# 3. Delete S3 bucket (optional)
+aws s3 rb s3://ski-crawler-screenshots --force
+
+# 4. Delete load balancer
+aws elbv2 delete-load-balancer --load-balancer-arn <alb-arn>
+
+# 5. Delete target group
+aws elbv2 delete-target-group --target-group-arn <target-group-arn>
+
+# 6. Delete VPC and associated resources
+aws ec2 delete-vpc --vpc-id <vpc-id>
 ```
 
-## Troubleshooting Guide
+## Troubleshooting
 
 ### Common Issues
 
-1. Pod Status Check
+1. Database Connectivity
 ```bash
-kubectl get pods -n ski-crawler
-kubectl describe pod <pod-name> -n ski-crawler
+# Test connection
+psql -h <rds-endpoint> -U admin -d ski_crawler
 ```
 
-2. Database Connection
+2. S3 Access
 ```bash
-kubectl exec -it <postgres-pod> -- psql -U <username> -d ski_crawler
+# Test S3 permissions
+aws s3 ls s3://ski-crawler-screenshots
 ```
 
-3. Logs Access
+3. Application Logs
 ```bash
-kubectl logs -f deployment/ski-crawler
-kubectl logs -f statefulset/postgres
+# View logs
+pm2 logs ski-crawler
 ```
 
-### Support
+### Support Contacts
+
+- AWS Infrastructure: aws-support@company.com
+- Application Support: app-support@company.com
+- Security Team: security@company.com
