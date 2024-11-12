@@ -2,19 +2,19 @@ flowchart TB
     subgraph "AWS Cloud"
         subgraph "VPC"
             subgraph "Public Subnet"
-                ALB["Application Load Balancer\n(HTTPS)"]
-                EC2["EC2 Instance\nUbuntu + Node.js v20\nCrawler Application"]
+                ALB["Application Load Balancer(HTTPS)"]
+                EC2["EC2 InstanceUbuntu + Node.js v20Crawler Application"]
             end
 
             subgraph "Private Subnet"
-                RDS[("Amazon RDS\nPostgreSQL 11.22")]
+                RDS[("Amazon RDSPostgreSQL 11.22")]
             end
         end
 
-        S3["S3 Bucket\nScreenshot Storage"]
-        R53["Route 53\nDNS Management"]
+        S3["S3 BucketScreenshot Storage"]
+        R53["Route 53DNS Management"]
         ACM["ACM Certificate"]
-        CW["CloudWatch\nMonitoring"]
+        CW["CloudWatchMonitoring"]
 
         subgraph "CI/CD"
             CP["CodePipeline"]
@@ -23,8 +23,8 @@ flowchart TB
         end
     end
 
-    GH["GitHub\nPrivate Repository"]
-    Users["Users\n(Web Frontend)"]
+    GH["GitHubPrivate Repository"]
+    Users["Users(Web Frontend)"]
 
     Users --> R53
     R53 --> ALB
