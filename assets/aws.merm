@@ -1,0 +1,39 @@
+flowchart TB
+    subgraph "AWS Cloud"
+        subgraph "VPC"
+            subgraph "Public Subnet"
+                ALB["Application Load Balancer\n(HTTPS)"]
+                EC2["EC2 Instance\nUbuntu + Node.js v20\nCrawler Application"]
+            end
+
+            subgraph "Private Subnet"
+                RDS[("Amazon RDS\nPostgreSQL 11.22")]
+            end
+        end
+
+        S3["S3 Bucket\nScreenshot Storage"]
+        R53["Route 53\nDNS Management"]
+        ACM["ACM Certificate"]
+        CW["CloudWatch\nMonitoring"]
+
+        subgraph "CI/CD"
+            CP["CodePipeline"]
+            CB["CodeBuild"]
+            CD["CodeDeploy"]
+        end
+    end
+
+    GH["GitHub\nPrivate Repository"]
+    Users["Users\n(Web Frontend)"]
+
+    Users --> R53
+    R53 --> ALB
+    ALB --> EC2
+    EC2 --> RDS
+    EC2 --> S3
+    GH --> CP
+    CP --> CB
+    CB --> CD
+    CD --> EC2
+    ACM --> ALB
+    EC2 --> CW

@@ -1,0 +1,29 @@
+flowchart TB
+    subgraph "Kubernetes Cluster"
+        subgraph "ski-crawler Namespace"
+            subgraph "Compute Layer"
+                ING["Ingress\nHTTPS"]
+                POD["Crawler Pods\n2x 500m/1Gi"]
+                CJ["CronJob\nDaily Crawl"]
+            end
+
+            subgraph "Data Layer"
+                PG["PostgreSQL StatefulSet\n1x 1Gi/10Gi"]
+                PVC["PersistentVolume\n10Gi"]
+            end
+        end
+    end
+
+    subgraph "External Services"
+        S3["AWS S3\nScreenshots"]
+        DNS["External DNS"]
+        Users["Users"]
+    end
+
+    Users --> DNS
+    DNS --> ING
+    ING --> POD
+    CJ --> POD
+    POD --> PG
+    POD --> S3
+    PG --> PVC
