@@ -1,5 +1,46 @@
 # AWS Implementation Guide
 
+```mermaid
+flowchart TB
+    subgraph "AWS Cloud"
+        subgraph "VPC"
+            subgraph "Public Subnet"
+                ALB["Application Load Balancer\n(HTTPS)"]
+                EC2["EC2 Instance\nUbuntu + Node.js v20\nCrawler Application"]
+            end
+
+            subgraph "Private Subnet"
+                RDS[("Amazon RDS\nPostgreSQL 11.22")]
+            end
+        end
+
+        S3["S3 Bucket\nScreenshot Storage"]
+        R53["Route 53\nDNS Management"]
+        ACM["ACM Certificate"]
+        CW["CloudWatch\nMonitoring"]
+
+        subgraph "CI/CD"
+            CP["CodePipeline"]
+            CB["CodeBuild"]
+            CD["CodeDeploy"]
+        end
+    end
+
+    GH["GitHub\nPrivate Repository"]
+    Users["Users\n(Web Frontend)"]
+
+    Users --> R53
+    R53 --> ALB
+    ALB --> EC2
+    EC2 --> RDS
+    EC2 --> S3
+    GH --> CP
+    CP --> CB
+    CB --> CD
+    CD --> EC2
+    ACM --> ALB
+    EC2 --> CW
+```
 ## Overview
 This guide details the AWS infrastructure setup for the Ski Card Crawler application.
 
@@ -220,33 +261,6 @@ aws cloudwatch put-metric-alarm \
     --period 300 \
     --threshold 80 \
     --statistic Average
-```
-
-## CI/CD Configuration
-
-```yaml
-# .github/workflows/aws-deploy.yml
-name: Deploy to AWS
-on:
-  push:
-    branches: [ main ]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /path/to/app
-            git pull
-            npm install
-            pm2 restart all
 ```
 
 ## Cost Breakdown
