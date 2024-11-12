@@ -2,33 +2,34 @@
 
 ```mermaid
 flowchart TB
+
+    subgraph "External Traffic"
+        DNS["External DNS"]
+        Users["Users"]
+    end
+
     subgraph "Kubernetes Cluster"
         subgraph "ski-crawler Namespace"
             subgraph "Compute Layer"
-                ING["Ingress- HTTPS"]
-                POD["Crawler Pods- 2x 500m/1Gi"]
-                CJ["CronJob- Daily Crawl"]
+                ING["Ingress (HTTPS)"]
+                POD["Crawler Pods (2x 500m/1Gi)"]
+                CJ["CronJob (Daily Crawl)"]
             end
 
             subgraph "Data Layer"
-                PG["PostgreSQL StatefulSet- 1x 1Gi/10Gi"]
-                PVC["PersistentVolume- 10Gi"]
+                PG["PostgreSQL StatefulSet (1x 1Gi/10Gi)"]
+                PVC["PersistentVolume (10Gi)"]
             end
         end
     end
 
-    subgraph "External Services"
-        S3["AWS S3- Screenshots"]
-        DNS["External DNS"]
-        Users["Users"]
-    end
 
     Users --> DNS
     DNS --> ING
     ING --> POD
     CJ --> POD
     POD --> PG
-    POD --> S3
+    POD --> S3["AWS S3 (Screenshots)"]
     PG --> PVC
 ```
 ## Overview
